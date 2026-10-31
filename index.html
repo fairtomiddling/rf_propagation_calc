@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RF Propagation Suite | HF Skywave & VHF LOS</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src='https://npmcdn.com/@turf/turf@6/turf.min.js'></script>
+
+    <style>
+        :root {
+            --c-primary:#0074D9; --c-success:#2ECC40; --c-danger:#FF4136;
+            --c-bg-app:#f4f4f4; --c-bg-panel:#fff; --c-text:#333; --c-muted:#666; --c-border:#ddd;
+            --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+        }
+        *,*::before,*::after{box-sizing:border-box}
+        body{margin:0;padding:0;font-family:var(--font);background:var(--c-bg-app);color:var(--c-text);overflow-x:hidden;height:100vh;display:flex;flex-direction:column}
+        #map-container{position:relative;width:100%;height:50vh;min-height:300px;z-index:1;border-bottom:1px solid var(--c-border)}
+        #map{width:100%;height:100%;outline:none}
+        .control-panel{position:relative;width:100%;background:var(--c-bg-panel);padding:16px;box-shadow:0 -2px 10px rgba(0,0,0,.05);flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;gap:16px;z-index:100}
+        @media(min-width:768px){
+            body{flex-direction:row;height:100dvh}
+            #map-container{flex:1;height:100%;border-bottom:none;border-right:1px solid var(--c-border)}
+            .control-panel{width:360px;flex-shrink:0;box-shadow:-4px 0 15px rgba(0,0,0,.08)}
+        }
+        .section-header{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--c-muted);border-bottom:1px solid var(--c-border);padding-bottom:6px;margin:0;display:flex;justify-content:space-between;align-items:center}
+        hr{border:0;border-top:1px solid var(--c-border);margin:0;opacity:.6}
+        .input-group{display:flex;flex-direction:column;gap:4px;width:100%}
+        @media(min-width:768px){.input-group{flex-direction:row;justify-content:space-between;align-items:center;gap:12px}}
+        .input-label{font-size:11px;font-weight:600;color:var(--c-muted);text-transform:uppercase;white-space:nowrap}
+        input[type=number],select{width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font-size:16px;background:#fff;transition:border-color .2s,box-shadow .2s}
+        @media(min-width:768px){input[type=number],select{width:130px;font-size:13px;padding:8px}}
+        input:focus,select:focus{outline:none;border-color:var(--c-primary);box-shadow:0 0 0 3px rgba(0,116,217,.15)}
+        select{appearance:none;background-image:url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23333%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");background-repeat:no-repeat;background-position:right 12px top 50%;background-size:10px auto;padding-right:32px}
+        .btn{width:100%;padding:10px;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;background:#e9ecef;color:var(--c-text);transition:background .2s}
+        .btn:hover{background:#dee2e6}
+        .toggle-switch{position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0}
+        .toggle-switch input{opacity:0;width:0;height:0}
+        .slider{position:absolute;cursor:pointer;inset:0;background:#ccc;transition:.3s;border-radius:24px}
+        .slider:before{position:absolute;content:"";height:18px;width:18px;left:3px;bottom:3px;background:#fff;transition:.3s;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+        input:checked+.slider{background:var(--c-success)}
+        input:checked+.slider:before{transform:translateX(20px)}
+        .mode-tabs{display:flex;gap:4px;background:#f1f3f5;padding:4px;border-radius:8px}
+        .tab-btn{flex:1;padding:8px 4px;border:none;background:transparent;cursor:pointer;font-size:12px;font-weight:600;border-radius:6px;color:var(--c-muted);transition:all .2s}
+        .tab-btn.active{background:#fff;color:var(--c-primary);box-shadow:0 2px 4px rgba(0,0,0,.05)}
+        .sub-section{background:#f8f9fa;padding:12px;border-radius:8px;border-left:3px solid var(--c-primary);display:flex;flex-direction:column;gap:8px}
+        .compass-card{background:linear-gradient(135deg,#eef2ff,#dbeafe);border:1px solid #bfdbfe;padding:12px;border-radius:8px;text-align:center}
+        .compass-value{font-size:28px;font-weight:700;color:var(--c-primary);line-height:1.1;display:block}
+        .compass-dir{font-size:12px;font-weight:600;color:var(--c-muted);text-transform:uppercase;letter-spacing:1px}
+        .metrics-table{width:100%;border-collapse:collapse;font-size:11px}
+        .metrics-table th,.metrics-table td{text-align:left;padding:8px 4px;border-bottom:1px solid #eee}
+        .metrics-table th{color:var(--c-muted);font-weight:600;font-size:10px;text-transform:uppercase}
+        .metrics-row{cursor:pointer;transition:background .15s}
+        .metrics-row:hover{background:#f0f8ff}
+        .metrics-row.hidden-path{opacity:.4;text-decoration:line-through}
+        .badge{display:inline-flex;align-items:center;gap:4px;font-weight:600}
+        .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+        .status-valid{color:var(--c-success)} .status-invalid{color:var(--c-danger)}
+        .alert-box{background:#fef3c7;border:1px solid #fde68a;color:#92400e;padding:10px;border-radius:6px;font-size:11px;display:none;word-break:break-word}
+        .alert-box.show{display:block}
+        .summary-footer{font-size:11px;color:var(--c-muted);font-style:italic;text-align:center}
+        .hint{font-size:9px;font-weight:400;color:#999;text-transform:none;letter-spacing:0}
+    </style>
+</head>
+<body>
+    <div id="map-container"><div id="map"></div></div>
+
+    <aside class="control-panel">
+        <nav class="mode-tabs">
+            <button class="tab-btn active" id="btn-mode-hf">HF Skywave</button>
+            <button class="tab-btn" id="btn-mode-vhf">VHF/UHF LOS</button>
+        </nav>
+
+        <section style="display:flex;flex-direction:column;gap:8px">
+            <header class="section-header">📍 Location & Terrain</header>
+            <div class="input-group"><label class="input-label" for="inp-lat-start">Start Lat</label><input type="number" id="inp-lat-start" step="any" value="53.9591"></div>
+            <div class="input-group"><label class="input-label" for="inp-lon-start">Start Lon</label><input type="number" id="inp-lon-start" step="any" value="-1.0815"></div>
+            <div class="input-group"><label class="input-label" for="inp-lat-end">End Lat</label><input type="number" id="inp-lat-end" step="any" value="38.2324"></div>
+            <div class="input-group"><label class="input-label" for="inp-lon-end">End Lon</label><input type="number" id="inp-lon-end" step="any" value="-122.6355"></div>
+            <div class="input-group"><label class="input-label" for="inp-elev-start">Start Elev (m ASL)</label><input type="number" id="inp-elev-start" step="any" value="15"></div>
+            <div class="input-group"><label class="input-label" for="inp-elev-end">End Elev (m ASL)</label><input type="number" id="inp-elev-end" step="any" value="30"></div>
+        </section>
+
+        <hr>
+
+        <section style="display:flex;flex-direction:column;gap:8px">
+            <header class="section-header">📡 Hardware Config</header>
+            <div class="input-group"><label class="input-label" for="inp-tx-height">TX Ht (m AGL)</label><input type="number" id="inp-tx-height" step="any" value="10"></div>
+            <div class="input-group"><label class="input-label" for="inp-rx-height">RX Ht (m AGL)</label><input type="number" id="inp-rx-height" step="any" placeholder="Optional"></div>
+            <button class="btn" id="btn-reset">Reset Defaults</button>
+        </section>
+
+        <hr>
+
+        <section style="display:flex;flex-direction:column;gap:6px">
+            <header class="section-header">🧭 Antenna Orientation</header>
+            <div class="compass-card">
+                <span style="font-size:10px;color:#64748b;display:block;margin-bottom:2px">Short Path Bearing</span>
+                <span class="compass-value" id="out-bearing-val">---°</span>
+                <span class="compass-dir" id="out-bearing-dir">---</span>
+            </div>
+        </section>
+
+        <hr>
+
+        <div id="panel-hf-settings">
+            <section style="display:flex;flex-direction:column;gap:8px">
+                <header class="section-header">🌐 Ionospheric Model
+                    <label class="toggle-switch"><input type="checkbox" id="chk-iono-model"><span class="slider"></span></label>
+                </header>
+                <div id="ionos-sub-controls" class="sub-section" style="display:none">
+                    <div class="input-group"><label class="input-label" for="sel-iono-source">Data Source</label>
+                        <select id="sel-iono-source"><option value="seasonal">Seasonal Average</option><option value="manual">Manual Entry (NOAA)</option></select>
+                    </div>
+                    <div id="form-seasonal" style="display:flex;flex-direction:column;gap:8px">
+                        <div class="input-group"><label class="input-label" for="sel-time-day">Time of Day</label><select id="sel-time-day"><option value="day">Daylight</option><option value="night">Night</option></select></div>
+                        <div class="input-group"><label class="input-label" for="sel-season">Season</label><select id="sel-season"><option value="summer">Summer</option><option value="winter">Winter</option></select></div>
+                    </div>
+                    <div id="form-manual" style="display:none;flex-direction:column;gap:8px">
+                        <div class="input-group"><label class="input-label" for="inp-sfi">Solar Flux (SFI)</label><input type="number" id="inp-sfi" value="150" min="50" max="300"></div>
+                        <div class="input-group"><label class="input-label" for="inp-kp">K-Index</label><input type="number" id="inp-kp" value="2" min="0" max="9"></div>
+                        <div style="font-size:9px;color:#888">*Source: <a href="https://www.swpc.noaa.gov/" target="_blank" rel="noopener">NOAA SWPC</a></div>
+                    </div>
+                    <div id="msg-clamp" class="alert-box"></div>
+                </div>
+            </section>
+        </div>
+
+        <div id="panel-vhf-info" style="display:none">
+            <section style="display:flex;flex-direction:column;gap:6px">
+                <header class="section-header">👁️ Line-of-Sight Analysis</header>
+                <p style="font-size:11px;color:#666;margin:0">Radio horizon from Earth curvature, ground elevation and antenna height. Valid for VHF/UHF direct & troposcatter paths.</p>
+            </section>
+        </div>
+
+        <hr>
+
+        <section style="display:flex;flex-direction:column;gap:6px">
+            <header class="section-header">📊 Path Metrics <span class="hint">(tap a row to toggle)</span></header>
+            <table class="metrics-table"><thead id="tbl-head"></thead><tbody id="tbl-body"></tbody></table>
+        </section>
+
+        <footer class="summary-footer" id="out-summary">Ready…</footer>
+    </aside>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- constants ---------- */
+const R_EARTH_KM = 6371;
+const DEFAULTS = { latStart:53.9591, lonStart:-1.0815, elevStart:15, latEnd:38.2324, lonEnd:-122.6355, elevEnd:30, txHeight:10, rxHeight:0 };
+const SCEN_HF = [
+    { id:'hop3', hops:3, color:'#EF4444', dash:'',       label:'3-Hop' },
+    { id:'hop4', hops:4, color:'#3B82F6', dash:'5, 10',  label:'4-Hop' },
+    { id:'hop2', hops:2, color:'#22C55E', dash:'2, 6',   label:'2-Hop' }
+];
+const SCEN_VHF = { id:'los', color:'#8B5CF6', dash:'', label:'Direct LOS' };
+
+/* ---------- state ---------- */
+const state = {
+    mode:'hf',
+    coords:{...DEFAULTS},
+    ionoEnabled:false, ionoSource:'seasonal', timeOfDay:'day', season:'summer', sfi:150, kp:2,
+    visibility:{ hop3:true, hop4:true, hop2:true, los:true }
+};
+
+let mapInstance=null, layers={}, markers={start:null,end:null};
+let currentScenarios=[];      // cached results shared by table + paths
+let currentIonoParams=null;   // cached for opacity in drawPaths
+
+/* ---------- utils ---------- */
+const d2r=d=>d*Math.PI/180, r2d=r=>r*180/Math.PI;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+function distanceKm(a,b,c,d){ const p=turf.point([b,a]),q=turf.point([d,c]); return turf.distance(p,q,{units:'kilometers'}); }
+
+function bearingDeg(lat1,lon1,lat2,lon2){
+    const f1=d2r(lat1),f2=d2r(lat2),dl=d2r(lon2-lon1);
+    const y=Math.sin(dl)*Math.cos(f2);
+    const x=Math.cos(f1)*Math.sin(f2)-Math.sin(f1)*Math.cos(f2)*Math.cos(dl);
+    return (r2d(Math.atan2(y,x))+360)%360;
+}
+function toCompass(deg){ const a=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"]; return a[Math.floor(deg/22.5+0.5)%16]; }
+
+function gcPoints(lat1,lon1,lat2,lon2,n){
+    const f1=d2r(lat1),l1=d2r(lon1),f2=d2r(lat2),l2=d2r(lon2);
+    const ds=Math.acos(clamp(Math.sin(f1)*Math.sin(f2)+Math.cos(f1)*Math.cos(f2)*Math.cos(l2-l1),-1,1));
+    if(ds===0||!isFinite(ds)) return [[lat1,lon1]];
+    const pts=[];
+    for(let i=0;i<=n;i++){
+        const t=i/n, A=Math.sin((1-t)*ds)/Math.sin(ds), B=Math.sin(t*ds)/Math.sin(ds);
+        const x=A*Math.cos(f1)*Math.cos(l1)+B*Math.cos(f2)*Math.cos(l2);
+        const y=A*Math.cos(f1)*Math.sin(l1)+B*Math.cos(f2)*Math.sin(l2);
+        const z=A*Math.sin(f1)+B*Math.sin(f2);
+        pts.push([r2d(Math.atan2(z,Math.hypot(x,y))), r2d(Math.atan2(y,x))]);
+    }
+    return pts;
+}
+function debounce(fn,ms){ let t; return (...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);}; }
+
+/* ---------- physics ---------- */
+// Law of Sines (numerically stable; avoids Cosines cancellation -> no bogus 0/neg TOA)
+function hfTOA(totalKm,hops,layerKm,txA,rxA,elevS,elevE){
+    const hop=totalKm/hops, gamma=(hop/2)/R_EARTH_KM;
+    if(gamma>=Math.PI/2) return null;
+    const rTx=R_EARTH_KM+(elevS+txA)/1000, rL=R_EARTH_KM+layerKm;
+    const d=Math.sqrt(rTx*rTx+rL*rL-2*rTx*rL*Math.cos(gamma));      // slant range
+    const sinA=clamp((rL*Math.sin(gamma))/d,-1,1);                  // angle at TX from zenith
+    let elev=90-r2d(Math.asin(sinA));                               // elevation from horizon
+    if(elev<0) elev=0;
+    return { toa:elev.toFixed(1), hopDist:Math.round(hop), valid:true };
+}
+function vhfLOS(totalKm,txA,rxA,elevS,elevE){
+    const K=4.12; // ~4/3 earth-radius refraction
+    const dT=K*Math.sqrt(Math.max(0,elevS+txA)), dR=K*Math.sqrt(Math.max(0,elevE+rxA));
+    const max=dT+dR;
+    return { maxRange:max.toFixed(1), actual:Math.round(totalKm), feasible:totalKm<=max, valid:true };
+}
+function ionoParams(){
+    if(!state.ionoEnabled) return { heights:{2:400,3:300,4:300}, lossDb:0, desc:'Pure Geometry' };
+    let h=300,loss=0;
+    if(state.ionoSource==='seasonal'){
+        if(state.timeOfDay==='day'){ h=state.season==='summer'?350:320; loss=3; }
+        else { h=state.season==='summer'?280:250; loss=0; }
+    } else {
+        h=300+((clamp(state.sfi,50,300)-50)/250)*100;
+        loss=clamp(state.kp,0,9)*1.5;
+    }
+    return { heights:{2:h+50,3:h,4:h-20}, lossDb:loss, desc:`${state.ionoSource.toUpperCase()} | Ht≈${h.toFixed(0)}km` };
+}
+
+/* ---------- DOM cache ---------- */
+const $=id=>document.getElementById(id);
+const el={
+    head:$('tbl-head'), body:$('tbl-body'), summary:$('out-summary'),
+    bearV:$('out-bearing-val'), bearD:$('out-bearing-dir'),
+    clamp:$('msg-clamp'), subIono:$('ionos-sub-controls'),
+    formS:$('form-seasonal'), formM:$('form-manual'),
+    panelHf:$('panel-hf-settings'), panelVhf:$('panel-vhf-info')
+};
+
+/* ---------- rendering (split so toggle never refits the map) ---------- */
+function clearPathLayers(){ Object.values(layers).forEach(g=>mapInstance.removeLayer(g)); layers={}; }
+
+function buildTable(){
+    el.head.innerHTML = state.mode==='hf'
+        ? '<tr><th>Path</th><th>TOA</th><th>Hop Dist</th><th>Status</th></tr>'
+        : '<tr><th>Type</th><th>Max Range</th><th>Actual</th><th>Status</th></tr>';
+    el.body.innerHTML='';
+    currentScenarios.forEach(s=>{
+        const tr=document.createElement('tr');
+        tr.className='metrics-row'+(state.visibility[s.id]?'':' hidden-path');
+        tr.dataset.pathId=s.id;
+        tr.addEventListener('click',()=>togglePath(s.id));   // addEventListener, not inline onclick
+        let c2,c3,c4;
+        if(s.type==='hf'){
+            c2=s.res?.valid?`${s.res.toa}°`:'-';
+            c3=s.res?.valid?`${s.res.hopDist} km`:'-';
+            c4=s.res?.valid?'<span class="status-valid">Valid</span>':'<span class="status-invalid">Invalid</span>';
+        } else {
+            c2=s.res?.maxRange?`${s.res.maxRange} km`:'-';
+            c3=s.res?.actual?`${s.res.actual} km`:'-';
+            c4=s.res?.feasible?'<span class="status-valid">In Range</span>':'<span class="status-invalid">Out of Range</span>';
+        }
+        tr.innerHTML=`<td><span class="badge"><span class="dot" style="background:${s.color}"></span>${s.label}</span></td><td><strong>${c2}</strong></td><td>${c3}</td><td>${c4}</td>`;
+        el.body.appendChild(tr);
+    });
+}
+
+function drawPaths(){
+    const c=state.coords;
+    const full=gcPoints(c.latStart,c.lonStart,c.latEnd,c.lonEnd,1000);
+    currentScenarios.forEach(s=>{
+        if(!state.visibility[s.id] || !s.res || !s.res.valid) return;
+        const g=L.layerGroup().addTo(mapInstance); layers[s.id]=g;
+        if(s.type==='hf'){
+            let cur=[c.latStart,c.lonStart];
+            const opac = state.ionoEnabled ? 0.9-(Math.min(1,currentIonoParams.lossDb/15)*0.6) : 0.9;
+            for(let i=0;i<s.hops;i++){
+                const nxt=full[Math.floor(((i+1)/s.hops)*999)];
+                L.polyline(gcPoints(cur[0],cur[1],nxt[0],nxt[1],40),{color:s.color,weight:3,opacity:opac,dashArray:s.dash}).addTo(g);
+                if(i<s.hops-1) L.circleMarker(nxt,{radius:5,fillColor:s.color,color:'#fff',weight:1.5,fillOpacity:1}).addTo(g)
+                    .bindPopup(`<b>${s.label}</b><br>Bounce #${i+1}<br>${nxt[0].toFixed(2)}°, ${nxt[1].toFixed(2)}°`);
+                cur=nxt;
+            }
+        } else {
+            L.polyline(gcPoints(c.latStart,c.lonStart,c.latEnd,c.lonEnd,100),{color:s.color,weight:3,opacity:0.9,dashArray:s.dash}).addTo(g);
+        }
+    });
+}
+
+/* ---------- the toggle: flip -> clear -> redraw paths -> rebuild table (NO fitBounds) ---------- */
+function togglePath(id){
+    state.visibility[id]=!state.visibility[id];
+    clearPathLayers();
+    drawPaths();
+    buildTable();
+}
+
+/* ---------- full update (used on input/mode/reset; DOES refit map) ---------- */
+function update(){
+    if(!mapInstance) return;
+    const c=state.coords;
+    const dist=distanceKm(c.latStart,c.lonStart,c.latEnd,c.lonEnd);
+    const brg=bearingDeg(c.latStart,c.lonStart,c.latEnd,c.lonEnd);
+    el.bearV.textContent=`${brg.toFixed(1)}°`; el.bearD.textContent=toCompass(brg);
+
+    // markers + bounds (only on full update, not on toggle)
+    if(markers.start) mapInstance.removeLayer(markers.start);
+    if(markers.end)   mapInstance.removeLayer(markers.end);
+    markers.start=L.marker([c.latStart,c.lonStart]).addTo(mapInstance);
+    markers.end  =L.marker([c.latEnd,c.lonEnd]).addTo(mapInstance);
+    mapInstance.fitBounds(new L.featureGroup([markers.start,markers.end]).getBounds().pad(0.15));
+
+    clearPathLayers();
+
+    // build cached scenarios
+    currentScenarios=[];
+    let warn=[];
+    if(state.mode==='hf'){
+        currentIonoParams=ionoParams();
+        el.summary.textContent=currentIonoParams.desc;
+        if(state.ionoEnabled && state.ionoSource==='manual'){
+            if(state.sfi<50)warn.push('SFI clamped to 50'); if(state.sfi>300)warn.push('SFI clamped to 300');
+            if(state.kp<0)warn.push('Kp clamped to 0');     if(state.kp>9)warn.push('Kp clamped to 9');
+        }
+        SCEN_HF.forEach(sc=>{
+            const lh=currentIonoParams.heights[sc.hops]||300;
+            currentScenarios.push({...sc,type:'hf',res:hfTOA(dist,sc.hops,lh,c.txHeight,c.rxHeight,c.elevStart,c.elevEnd)});
+        });
+    } else {
+        currentIonoParams=null;
+        el.summary.textContent='VHF/UHF Earth Curvature Model';
+        currentScenarios.push({...SCEN_VHF,type:'vhf',hops:1,res:vhfLOS(dist,c.txHeight,c.rxHeight,c.elevStart,c.elevEnd)});
+    }
+    el.clamp.textContent = warn.length?('⚠️ '+warn.join('; ')):'';
+    el.clamp.classList.toggle('show',warn.length>0);
+
+    buildTable();
+    drawPaths();
+}
+
+/* ---------- state sync from inputs ---------- */
+function syncCoords(){
+    const c=state.coords;
+    c.latStart=parseFloat($('inp-lat-start').value)||0; c.lonStart=parseFloat($('inp-lon-start').value)||0;
+    c.latEnd  =parseFloat($('inp-lat-end').value)||0;   c.lonEnd  =parseFloat($('inp-lon-end').value)||0;
+    c.elevStart=parseFloat($('inp-elev-start').value)||0; c.elevEnd=parseFloat($('inp-elev-end').value)||0;
+    c.txHeight=parseFloat($('inp-tx-height').value)||0;  c.rxHeight=parseFloat($('inp-rx-height').value)||0;
+}
+function syncIono(){
+    state.timeOfDay=$('sel-time-day').value; state.season=$('sel-season').value;
+    state.sfi=parseInt($('inp-sfi').value)||150; state.kp=parseInt($('inp-kp').value)||2;
+}
+
+/* ---------- mode / reset ---------- */
+function setMode(m){
+    state.mode=m;
+    $('btn-mode-hf').classList.toggle('active',m==='hf');
+    $('btn-mode-vhf').classList.toggle('active',m==='vhf');
+    el.panelHf.style.display=m==='hf'?'block':'none';
+    el.panelVhf.style.display=m==='vhf'?'block':'none';
+    setTimeout(()=>{ if(mapInstance)mapInstance.invalidateSize(); update(); },80);
+}
+function reset(){
+    Object.assign(state.coords,DEFAULTS);
+    state.visibility={hop3:true,hop4:true,hop2:true,los:true};
+    state.ionoEnabled=false;
+    $('inp-lat-start').value=DEFAULTS.latStart; $('inp-lon-start').value=DEFAULTS.lonStart;
+    $('inp-lat-end').value=DEFAULTS.latEnd;     $('inp-lon-end').value=DEFAULTS.lonEnd;
+    $('inp-elev-start').value=DEFAULTS.elevStart; $('inp-elev-end').value=DEFAULTS.elevEnd;
+    $('inp-tx-height').value=DEFAULTS.txHeight; $('inp-rx-height').value='';
+    $('chk-iono-model').checked=false; el.subIono.style.display='none';
+    setMode('hf');
+}
+
+/* ---------- wiring ---------- */
+function bind(){
+    $('btn-mode-hf').addEventListener('click',()=>setMode('hf'));
+    $('btn-mode-vhf').addEventListener('click',()=>setMode('vhf'));
+    $('btn-reset').addEventListener('click',reset);
+
+    ['inp-lat-start','inp-lon-start','inp-lat-end','inp-lon-end','inp-elev-start','inp-elev-end','inp-tx-height','inp-rx-height']
+        .forEach(id=>$(id).addEventListener('input',debounce(()=>{syncCoords();update();},400)));
+
+    $('chk-iono-model').addEventListener('change',e=>{
+        state.ionoEnabled=e.target.checked;
+        el.subIono.style.display=state.ionoEnabled?'flex':'none';
+        update();
+    });
+    $('sel-iono-source').addEventListener('change',e=>{
+        state.ionoSource=e.target.value;
+        el.formS.style.display=state.ionoSource==='seasonal'?'flex':'none';
+        el.formM.style.display=state.ionoSource==='manual'?'flex':'none';
+        update();
+    });
+    ['sel-time-day','sel-season','inp-sfi','inp-kp'].forEach(id=>$(id).addEventListener('change',()=>{syncIono();update();}));
+
+    window.addEventListener('resize',debounce(()=>{ if(mapInstance)mapInstance.invalidateSize(); },200));
+}
+
+function init(){
+    if(typeof L==='undefined'||typeof turf==='undefined'){ alert('Libraries failed to load — check connection.'); return; }
+    mapInstance=L.map('map',{zoomAnimation:false,markerZoomAnimation:false,fadeAnimation:false}).setView([50,-60],3);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(mapInstance);
+    bind();
+    update();
+}
+
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
+})();
+</script>
+</body>
+</html>
